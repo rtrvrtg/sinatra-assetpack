@@ -104,7 +104,6 @@ module Sinatra
       end
 
       def combined(request)
-        headers = {}
         paths.map { |path|
           fetch_path(path, request)
         }.join("\n")
@@ -125,42 +124,13 @@ module Sinatra
       end
 
       def fetch_path(path, request)
-        @path_cache = {} unless defined?(@path_cache)
-        return @path_cache[path] if @path_cache.has_key? path
-
-        base_path = @assets.app.settings.wiki_options[:base_path]
-        url = "#{$HOST_NAME}#{base_path}#{path}"
-
-        url = URI.parse(url)
-        http = Net::HTTP.new(url.host, url.port)
-        request = Net::HTTP::Get.new(url.to_s)
-
-        if request["HTTP_AUTHORIZATION"]
-          headers = {
-            "Authorization" => request["HTTP_AUTHORIZATION"]
-          }
-          request.initialize_http_header headers
-        end
-
-        result = http.request(request)
-
-        if result.code == "200"
-          if result.body.respond_to?(:force_encoding)
-            response_encoding = 'UTF-8'
-            encoding_bits = result.content_type.split(/;\s*charset\s*=\s*/)
-            response_encoding = encoding_bits.last.upcase if encoding_bits.length > 1
-            @path_cache[path] = result.body.force_encoding(response_encoding).encode(Encoding.default_external || 'ASCII-8BIT')
-          else
-            @path_cache[path] = result.body
-          end
+        result = session.get(path)
+        if result.body.respond_to?(:force_encoding)
+          response_encoding = result.content_type.split(/\;\s*charset\s*=\s*/).last.upcase rescue 'ASCII-8BIT'
+          result.body.force_encoding(response_encoding).encode(Encoding.default_external || 'ASCII-8BIT')  if result.status == 200
         else
-          @path_cache[path] = ""
+          result.body  if result.status == 200
         end
-
-        @path_cache[path]
-      rescue StandardError => e
-        puts e.inspect
-        ""
       end
     end
   end
